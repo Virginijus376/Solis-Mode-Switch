@@ -2,8 +2,8 @@ name: SolisCloud režimo keitimas
 
 on:
   schedule:
-    - cron: '0 0 * * *'    # 03:00 LT – Selling First
-    - cron: '0 12 * * *'   # 15:00 LT – Self-Use
+    - cron: '0 0 * * *'   # 03:00 LT – Selling First
+    - cron: '0 12 * * *'  # 15:00 LT – Self-Use
   workflow_dispatch:
 
 jobs:
@@ -15,38 +15,54 @@ jobs:
       DEVICE_SN:  ${{ secrets.DEVICE_SN }}
 
     steps:
-      - name: Korektiškai perjungti režimą
+      - name: Paruošti ir išsiųsti užklausas
         run: |
-          # 1) Paruošiame režimą, datą ir laiką
+          # 1) Parenkame režimą
           hour=$(date +%H)
-          if (( 10#$hour < 12 )); then
+          if ((10#$hour < 12)); then
             MODE=2; LABEL="Selling First"
           else
             MODE=3; LABEL="Self-Use"
           fi
           TODAY=$(date +%F)
           NOW=$(date +%T)
-          echo "🔄 Režimas:  $LABEL ($MODE)"
-          echo "📅 Data:     $TODAY"
-          echo "⏰ Laikas:   $NOW"
+          echo "🔄 Režimas: $LABEL ($MODE)"
+          echo "📅 Data:   $TODAY"
+          echo "⏰ Laikas: $NOW"
 
-          # 2) Gauname prieigos tokeną SU date/time
+          # 2) Sukuriame login JSON per jq
+          token_payload=$(jq -nc \
+            --arg appId "$APP_ID" \
+            --arg secret "$APP_SECRET" \
+            --arg date "$TODAY" \
+            --arg time "$NOW" \
+            '{appId:$appId, secret:$secret, date:$date, time:$time}')
+          echo "🔐 Token payload: $token_payload"
+
+          # 3) Gauname tokeną
           token_resp=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Content-Type: application/json" \
-            -d "{\"appId\":\"$APP_ID\",\"secret\":\"$APP_SECRET\",\"date\":\"$TODAY\",\"time\":\"$NOW\"}")
-          echo "🔐 Tokeno atsakymas: $token_resp"
+            -d "$token_payload")
+          echo "🔐 Token response: $token_resp"
           token=$(echo "$token_resp" | jq -r '.data.access_token // .access_token // empty')
           if [[ -z "$token" ]]; then
-            echo "❌ Tokenas tuščias – nutraukiame."
+            echo "❌ Tokenas nepavyko – stabdau."
             exit 1
           fi
           echo "✅ Tokenas: $token"
 
-          # 3) Siunčiame control KOMANDĄ su ta pačia date/time
-          payload="{\"deviceSn\":\"$DEVICE_SN\",\"param\":{\"workMode\":$MODE,\"date\":\"$TODAY\",\"time\":\"$NOW\",\"source\":1}}"
-          echo "📨 Payload: $payload"
+          # 4) Sukuriame control JSON per jq
+          control_payload=$(jq -nc \
+            --arg dsn "$DEVICE_SN" \
+            --argjson mode "$MODE" \
+            --arg date "$TODAY" \
+            --arg time "$NOW" \
+            '{deviceSn:$dsn, param:{workMode:$mode, date:$date, time:$time, source:1}}')
+          echo "📨 Control payload: $control_payload"
+
+          # 5) Siunčiame perjungimo komandą
           control_resp=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer $token" \
             -H "Content-Type: application/json" \
-            -d "$payload")
+            -d "$control_payload")
           echo "📤 Control response: $control_resp"
