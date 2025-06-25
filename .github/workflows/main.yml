@@ -2,17 +2,16 @@ name: SolisCloud režimo keitimas
 
 on:
   schedule:
-    - cron: '0 0 * * *'    # 03:00 LT – Selling First
-    - cron: '0 12 * * *'   # 15:00 LT – Self-Use
+    - cron: '0 0 * * *'   # 03:00 LT – Selling First
+    - cron: '0 12 * * *'  # 15:00 LT – Self-Use
   workflow_dispatch:
 
 jobs:
   switch-mode:
     runs-on: ubuntu-latest
-    env:
-      TODAY: ${{ github.run_started_at }}
+
     steps:
-      - name: Nustatyti režimą ir laiką
+      - name: Nustatyti režimą
         run: |
           hour=$(date +%H)
           if (( 10#$hour < 12 )); then
@@ -22,32 +21,36 @@ jobs:
             echo "MODE=3" >> $GITHUB_ENV
             echo "LABEL=Self-Use" >> $GITHUB_ENV
           fi
-          echo "TODAY=$(date +%F)" >> $GITHUB_ENV
-          echo "NOW=$(date +%T)" >> $GITHUB_ENV
 
       - name: Gauti SolisCloud prieigos raktą
         run: |
           token=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Content-Type: application/json" \
-            -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" | jq -r .access_token)
+            -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" \
+            | jq -r .access_token)
           echo "TOKEN=$token" >> $GITHUB_ENV
 
       - name: Išsiųsti darbo režimo pakeitimą
         run: |
-          echo "📡 Režimas: ${{ env.LABEL }}"
-          echo "📅 Data:    ${{ env.TODAY }}"
-          echo "⏰ Laikas:  ${{ env.NOW }}"
+          TODAY=$(date +%F)
+          NOW=$(date +%T)
+
+          echo "📡 Režimas:   ${{ env.LABEL }}"
+          echo "📅 Data:      $TODAY"
+          echo "⏰ Laikas:    $NOW"
+
+          payload=$(cat <<EOF
+{"deviceSn":"${{ secrets.DEVICE_SN }}","param":{"workMode":${{ env.MODE }},"date":"$TODAY","time":"$NOW","source":1}}
+EOF
+)
+
+          echo "🔍 Payload:"
+          echo "$payload"
+
           response=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ env.TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"deviceSn\": \"${{ secrets.DEVICE_SN }}\",
-              \"param\": {
-                \"workMode\": \"${{ env.MODE }}\",
-                \"date\": \"${{ env.TODAY }}\",
-                \"time\": \"${{ env.NOW }}\",
-                \"source\": 1
-              }
-            }")
+            -d "$payload")
+
           echo "➡️ API atsakymas:"
           echo "$response"
