@@ -4,8 +4,8 @@ name: SolisCloud režimo keitimas
 
 on:
   schedule:
-    - cron: '0 0 * * *'    # 03:00 LT – Selling First
-    - cron: '0 12 * * *'   # 15:00 LT – Self-Use
+    - cron: '0 0 * * *'   # 03:00 LT – Selling First
+    - cron: '0 12 * * *'  # 15:00 LT – Self-Use
   workflow_dispatch:
 
 jobs:
@@ -29,32 +29,25 @@ jobs:
           TODAY=$(date +%F)
           NOW=$(date +%T)
 
-          # 2) HTTP Date header (RFC-1123 GMT) – privalomas auth endpoint’ui
-          HTTP_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S GMT")
+          echo "🔄 MODE:  $LABEL ($MODE)"
+          echo "📅 DATE:  $TODAY"
+          echo "⏰ TIME:  $NOW"
 
-          echo "🔄 MODE:      $LABEL ($MODE)"
-          echo "📅 DATE:      $TODAY"
-          echo "⏰ TIME:      $NOW"
-          echo "🗓 HTTP-Date: $HTTP_DATE"
-
-          # 3) GET tokeno užklausa su query params + Date header
-          TOKEN_URL="https://www.soliscloud.com:13333/oauth2/token?appId=$APP_ID&secret=$APP_SECRET&date=$TODAY&time=$NOW"
-          echo "🔗 Token URL: $TOKEN_URL"
-          token_resp=$(curl -s -H "Date: $HTTP_DATE" "$TOKEN_URL")
+          # 2) Gauname tokeną su Basic Auth
+          token_resp=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
+            -u "$APP_ID:$APP_SECRET")
           echo "🔐 Token response: $token_resp"
 
-          # 4) Ištraukiame gyvą tokeną
-          TOKEN=$(echo "$token_resp" \
-            | jq -r '.data.access_token // .access_token // empty')
+          TOKEN=$(echo "$token_resp" | jq -r '.data.access_token // .access_token')
           if [[ -z "$TOKEN" ]]; then
-            echo "❌ Token gavimas nepavyko – pažiūrėkite aukščiau ‘Token response’."
+            echo "❌ Token gavimas nepavyko."
             exit 1
           fi
           echo "✅ TOKEN: $TOKEN"
 
-          # 5) POST kontrolės komanda su JSON payload’u
+          # 3) Kontrolės POST su JSON payload’u
           PAYLOAD='{"deviceSn":"'"$DEVICE_SN"'","param":{"workMode":'"$MODE"',"date":"'"$TODAY"'","time":"'"$NOW"'","source":1}}'
-          echo "📨 Control payload: $PAYLOAD"
+          echo "📨 Payload: $PAYLOAD"
           control_resp=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
