@@ -10,7 +10,7 @@ jobs:
   switch-mode:
     runs-on: ubuntu-latest
     steps:
-      - name: Nustatyti režimą ir datą
+      - name: Nustatyti režimą, datą ir laiką
         run: |
           if [[ "${{ github.event.schedule }}" == "0 0 * * *" ]]; then
             echo "MODE=2" >> $GITHUB_ENV
@@ -20,6 +20,7 @@ jobs:
             echo "MODE_LABEL=Self-Use" >> $GITHUB_ENV
           fi
           echo "TODAY=$(date +%F)" >> $GITHUB_ENV
+          echo "NOW=$(date +%T)" >> $GITHUB_ENV
 
       - name: Gauti prieigos raktą
         run: |
@@ -28,12 +29,14 @@ jobs:
             -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" | jq -r .access_token)
           echo "TOKEN=$token" >> $GITHUB_ENV
 
-      - name: Išsiųsti darbo režimo pakeitimą su data
+      - name: Išsiųsti darbo režimo pakeitimą su papildomais laukais
         run: |
-          curl -v -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+          response=$(curl -s -w "%{http_code}" -o result.json -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ env.TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":\"${{ env.MODE }}\",\"date\":\"${{ env.TODAY }}\"}}"
+            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":\"${{ env.MODE }}\",\"date\":\"${{ env.TODAY }}\",\"time\":\"${{ env.NOW }}\",\"source\":1}}")
+          echo "HTTP_RESPONSE=$response" >> $GITHUB_ENV
+          cat result.json
 
       - name: Siųsti el. laišką apie rezultatą
         uses: dawidd6/action-send-mail@v3
@@ -47,6 +50,7 @@ jobs:
           to: ${{ secrets.EMAIL_TO }}
           from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
           body: |
-            ✅ Režimas perjungtas į: ${{ env.MODE_LABEL }}
+            🟢 Bandymas pakeisti režimą į: ${{ env.MODE_LABEL }}
             📅 Data: ${{ env.TODAY }}
-            🟢 Užklausa su data išsiųsta per GitHub Actions.
+            ⏰ Laikas: ${{ env.NOW }}
+            📡 API atsakymas: ${{ env.HTTP_RESPONSE }}
