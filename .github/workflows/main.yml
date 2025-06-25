@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Perjungti inverterio režimą
         run: |
-          # 1) MODE + control API date/time
+          # 1) Paruošiame MODE + kontrolės API date/time
           hour=$(date +%H)
           if ((10#$hour < 12)); then
             MODE=2; LABEL="Selling First"
@@ -37,20 +37,21 @@ jobs:
           echo "⏰ TIME:      $NOW"
           echo "🗓 HTTP-Date: $HTTP_DATE"
 
-          # 3) GET token su Basic auth + Date header
-          TOKEN_URL="https://www.soliscloud.com:13333/oauth2/token?appId=$APP_ID&secret=$APP_SECRET&date=$TODAY&time=$NOW"
-          echo "🔗 Token URL: $TOKEN_URL"
-          token_resp=$(curl -s \
-            -u "$APP_ID:$APP_SECRET" \
+          # 3) Rankiniu būdu paruošiame Basic auth header
+          BASIC=$(echo -n "$APP_ID:$APP_SECRET" | base64 | tr -d '\n')
+          
+          # 4) Gauname tokeną – POST + Basic + Date + form-urlencoded date/time
+          token_resp=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
+            -H "Authorization: Basic $BASIC" \
             -H "Date: $HTTP_DATE" \
-            "$TOKEN_URL")
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "date=$TODAY" \
+            --data-urlencode "time=$NOW")
           echo "🔐 Token response: $token_resp"
 
-          # 4) Ištraukame tikrą token’ą
-          TOKEN=$(echo "$token_resp" \
-            | jq -r '.data.access_token // .access_token // empty')
+          TOKEN=$(echo "$token_resp" | jq -r '.data.access_token // .accessToken // .access_token // empty')
           if [[ -z "$TOKEN" ]]; then
-            echo "❌ Token gavimas nepavyko – žiūrėkite aukščiau Token response."
+            echo "❌ Token gavimas nepavyko – peržiūrėkite aukščiau ‘Token response’."
             exit 1
           fi
           echo "✅ TOKEN: $TOKEN"
