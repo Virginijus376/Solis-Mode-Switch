@@ -1,25 +1,66 @@
-# 1) Susidėliojam URL
-TOKEN_URL="https://www.soliscloud.com:13333/oauth2/token?appId=$APP_ID&secret=$APP_SECRET&date=$TODAY&time=$NOW"
-echo "🔗 Token URL: $TOKEN_URL"
+# .github/workflows/main.yml
 
-# 2) Pulam atsakymą ir jį log’inam
-token_resp=$(curl -s "$TOKEN_URL")
-echo "🔐 Raw token_resp: $token_resp"
+name: SolisCloud režimo keitimas
 
-# 3) Ištiriame JSON struktūrą – laikas atspausdinti kelis variantus
-echo "Possible fields:"
-echo " .access_token:" $(echo "$token_resp" | jq -r '.access_token // "–"')
-echo " .data.access_token:" $(echo "$token_resp" | jq -r '.data.access_token // "–"')
-echo " .data.accessToken:" $(echo "$token_resp" | jq -r '.data.accessToken // "–"')
-echo " .token:" $(echo "$token_resp" | jq -r '.token // "–"')
+on:
+  schedule:
+    - cron: '0 0 * * *'    # 03:00 LT – Selling First
+    - cron: '0 12 * * *'   # 15:00 LT – Self-Use
+  workflow_dispatch:
 
-# 4) Kai matysite tikrą lauką (nebebus “–” arba “null”), naudokite tą kelią:
-#    tarkim, pas jus pagaliau tikras rodo .data.accessToken
-TOKEN=$(echo "$token_resp" | jq -r '.data.accessToken')
-echo "✅ Parsed TOKEN: $TOKEN"
+jobs:
+  switch-mode:
+    runs-on: ubuntu-latest
+    env:
+      APP_ID:     ${{ secrets.APP_ID }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
+      DEVICE_SN:  ${{ secrets.DEVICE_SN }}
 
-# 5) Jei TOKEN vis dar tuščias arba null – stabdom job
-if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
-  echo "❌ Token gavimas nepavyko – peržiūrėkite Raw token_resp aukščiau."
-  exit 1
-fi
+    steps:
+      - name: Debug `/oauth2/token` & perjungti režimą
+        run: |
+          # 1) Paruošiame režimą, datą ir laiką
+          hour=$(date +%H)
+          if (( 10#$hour < 12 )); then
+            MODE=2; LABEL="Selling First"
+          else
+            MODE=3; LABEL="Self-Use"
+          fi
+          TODAY=$(date +%F)
+          NOW=$(date +%T)
+          echo "🔄 MODE:  $LABEL ($MODE)"
+          echo "📅 DATE:  $TODAY"
+          echo "⏰ TIME:  $NOW"
+
+          # 2) Sudedame tokeno URL su query params
+          TOKEN_URL="https://www.soliscloud.com:13333/oauth2/token?appId=$APP_ID&secret=$APP_SECRET&date=$TODAY&time=$NOW"
+          echo "🔗 Token URL: $TOKEN_URL"
+
+          # 3) Gauname ir log’iname RAW atsakymą
+          token_resp=$(curl -s "$TOKEN_URL")
+          echo "🔐 Raw token_resp: $token_resp"
+
+          # 4) Patikriname kelis galimus laukus
+          echo "Possible token fields:"
+          echo " .access_token:      " $(echo "$token_resp" | jq -r '.access_token // "–"')
+          echo " .data.access_token: " $(echo "$token_resp" | jq -r '.data.access_token // "–"')
+          echo " .data.accessToken:  " $(echo "$token_resp" | jq -r '.data.accessToken // "–"')
+          echo " .token:             " $(echo "$token_resp" | jq -r '.token // "–"')
+
+          # 5) Išrenkame tikslų lauką (pakeiskite .data.accessToken į rastą kelią)
+          TOKEN=$(echo "$token_resp" | jq -r '.data.accessToken // .data.access_token // .access_token // .token // empty')
+          echo "✅ Parsed TOKEN: $TOKEN"
+
+          if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
+            echo "❌ Token išgavimas nepavyko – peržiūrėkite Raw response aukščiau."
+            exit 1
+          fi
+
+          # 6) Siunčiame control POST su JSON payload’u
+          PAYLOAD='{"deviceSn":"'"$DEVICE_SN"'","param":{"workMode":'"$MODE"',"date":"'"$TODAY"'","time":"'"$NOW"'","source":1}}'
+          echo "📨 Control payload: $PAYLOAD"
+          control_resp=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+          echo "📤 Control response: $control_resp"
