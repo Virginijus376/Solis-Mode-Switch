@@ -15,9 +15,9 @@ jobs:
       DEVICE_SN:  ${{ secrets.DEVICE_SN }}
 
     steps:
-      - name: Korektiškai pakeisti režimą
+      - name: Korektiškai perjungti režimą
         run: |
-          # 1) Paruošiame date/time + režimą
+          # 1) Paruošiame režimą, datą ir laiką
           hour=$(date +%H)
           if (( 10#$hour < 12 )); then
             MODE=2; LABEL="Selling First"
@@ -26,27 +26,27 @@ jobs:
           fi
           TODAY=$(date +%F)
           NOW=$(date +%T)
-          echo "🔄 Režimas: $LABEL ($MODE)"
-          echo "📅 Data:   $TODAY"
-          echo "⏰ Laikas: $NOW"
+          echo "🔄 Režimas:  $LABEL ($MODE)"
+          echo "📅 Data:     $TODAY"
+          echo "⏰ Laikas:   $NOW"
 
-          # 2) Gauname tokeną kartu su date/time (kitaip – 403)
+          # 2) Gauname prieigos tokeną SU date/time
           token_resp=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Content-Type: application/json" \
             -d "{\"appId\":\"$APP_ID\",\"secret\":\"$APP_SECRET\",\"date\":\"$TODAY\",\"time\":\"$NOW\"}")
           echo "🔐 Tokeno atsakymas: $token_resp"
           token=$(echo "$token_resp" | jq -r '.data.access_token // .access_token // empty')
           if [[ -z "$token" ]]; then
-            echo "❌ Tokenas tuščias – stabdau job."
+            echo "❌ Tokenas tuščias – nutraukiame."
             exit 1
           fi
-          echo "✅ Tokenas gautas."
+          echo "✅ Tokenas: $token"
 
-          # 3) Siunčiame kontrolės komandą
+          # 3) Siunčiame control KOMANDĄ su ta pačia date/time
           payload="{\"deviceSn\":\"$DEVICE_SN\",\"param\":{\"workMode\":$MODE,\"date\":\"$TODAY\",\"time\":\"$NOW\",\"source\":1}}"
           echo "📨 Payload: $payload"
-          response=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+          control_resp=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer $token" \
             -H "Content-Type: application/json" \
             -d "$payload")
-          echo "📤 Kontrolės atsakymas: $response"
+          echo "📤 Control response: $control_resp"
