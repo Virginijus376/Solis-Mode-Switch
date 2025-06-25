@@ -2,36 +2,48 @@ name: SolisCloud režimo keitimas
 
 on:
   schedule:
-    - cron: '0 0 * * *'    # 03:00 LT – Selling First
-    - cron: '0 12 * * *'   # 15:00 LT – Self-Use
+    - cron: '0 0 * * *'    # 03:00 Lietuvos laiku – Selling First
+    - cron: '0 12 * * *'   # 15:00 Lietuvos laiku – Self-Use
   workflow_dispatch:
 
 jobs:
   switch-mode:
     runs-on: ubuntu-latest
     steps:
-      - name: Nustatyti režimą, datą ir laiką
+      - name: Nustatyti režimą ir laiką
         run: |
           if [[ "${{ github.event.schedule }}" == "0 0 * * *" ]]; then
             echo "MODE=2" >> $GITHUB_ENV
-            echo "MODE_LABEL=Selling First" >> $GITHUB_ENV
+            echo "LABEL=Selling First" >> $GITHUB_ENV
           else
             echo "MODE=3" >> $GITHUB_ENV
-            echo "MODE_LABEL=Self-Use" >> $GITHUB_ENV
+            echo "LABEL=Self-Use" >> $GITHUB_ENV
           fi
           echo "TODAY=$(date +%F)" >> $GITHUB_ENV
           echo "NOW=$(date +%T)" >> $GITHUB_ENV
 
-      - name: Gauti prieigos raktą
+      - name: Gauti SolisCloud prieigos raktą
         run: |
           token=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Content-Type: application/json" \
             -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" | jq -r .access_token)
           echo "TOKEN=$token" >> $GITHUB_ENV
 
-      - name: Išsiųsti darbo režimo pakeitimą
+      - name: Išsiųsti darbo režimo pakeitimą su papildomais laukais
         run: |
-          curl -v -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+          response=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ env.TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":\"${{ env.MODE }}\",\"date\":\"${{ env.TODAY }}\",\"time\":\"${{ env.NOW }}\",\"source\":1}}"
+            -d "{
+              \"deviceSn\": \"${{ secrets.DEVICE_SN }}\",
+              \"param\": {
+                \"workMode\": \"${{ env.MODE }}\",
+                \"date\": \"${{ env.TODAY }}\",
+                \"time\": \"${{ env.NOW }}\",
+                \"source\": 1
+              }
+            }")
+          echo "Režimas: ${{ env.LABEL }}"
+          echo "Data:    ${{ env.TODAY }}"
+          echo "Laikas:  ${{ env.NOW }}"
+          echo "API atsakymas: $response"
