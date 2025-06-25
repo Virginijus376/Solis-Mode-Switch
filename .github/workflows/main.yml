@@ -9,7 +9,6 @@ on:
 jobs:
   switch-mode:
     runs-on: ubuntu-latest
-
     steps:
       - name: Nustatyti režimą
         run: |
@@ -22,7 +21,7 @@ jobs:
             echo "LABEL=Self-Use" >> $GITHUB_ENV
           fi
 
-      - name: Gauti SolisCloud prieigos raktą
+      - name: Gauti SolisCloud tokeną
         run: |
           token=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Content-Type: application/json" \
@@ -34,23 +33,11 @@ jobs:
         run: |
           TODAY=$(date +%F)
           NOW=$(date +%T)
+          echo "▶️ Režimas: ${{ env.LABEL }} | Data: $TODAY | Laikas: $NOW"
 
-          echo "📡 Režimas:   ${{ env.LABEL }}"
-          echo "📅 Data:      $TODAY"
-          echo "⏰ Laikas:    $NOW"
-
-          payload=$(cat <<EOF
-{"deviceSn":"${{ secrets.DEVICE_SN }}","param":{"workMode":${{ env.MODE }},"date":"$TODAY","time":"$NOW","source":1}}
-EOF
-)
-
-          echo "🔍 Payload:"
-          echo "$payload"
-
-          response=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+          RESPONSE=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ env.TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "$payload")
+            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":${{ env.MODE }},\"date\":\"$TODAY\",\"time\":\"$NOW\",\"source\":1}}")
 
-          echo "➡️ API atsakymas:"
-          echo "$response"
+          echo "➡️ API atsakymas: $RESPONSE"
