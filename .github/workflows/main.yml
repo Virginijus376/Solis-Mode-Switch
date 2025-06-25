@@ -1,0 +1,31 @@
+name: SolisCloud režimo keitimas
+
+on:
+  schedule:
+    - cron: '0 0 * * *'    # 03:00 LT – Selling First
+    - cron: '0 12 * * *'   # 15:00 LT – Self Use
+  workflow_dispatch:
+
+jobs:
+  switch-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pasirinkti režimą pagal laiką
+        run: |
+          if [[ "${{ github.event.schedule }}" == "0 0 * * *" ]]; then
+            echo "MODE=2" >> $GITHUB_ENV  # Selling First
+          else
+            echo "MODE=3" >> $GITHUB_ENV  # Self Use
+          fi
+      - name: Gauti prieigos raktą
+        run: |
+          token=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
+            -H "Content-Type: application/json" \
+            -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" | jq -r .access_token)
+          echo "TOKEN=$token" >> $GITHUB_ENV
+      - name: Pakeisti inverterio darbo režimą
+        run: |
+          curl -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+            -H "Authorization: Bearer ${{ env.TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":\"${{ env.MODE }}\"}}"
