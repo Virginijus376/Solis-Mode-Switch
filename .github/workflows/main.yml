@@ -12,7 +12,8 @@ jobs:
     steps:
       - name: Nustatyti režimą ir laiką
         run: |
-          if [[ "${{ github.event.schedule }}" == "0 0 * * *" ]]; then
+          hour=$(date +%H)
+          if (( 10#$hour < 12 )); then
             echo "MODE=2" >> $GITHUB_ENV
             echo "LABEL=Selling First" >> $GITHUB_ENV
           else
@@ -29,8 +30,10 @@ jobs:
             -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" | jq -r .access_token)
           echo "TOKEN=$token" >> $GITHUB_ENV
 
-      - name: Išsiųsti darbo režimo pakeitimą su papildomais laukais
+      - name: Išsiųsti darbo režimo pakeitimą
         run: |
+          echo "Bandome nustatyti režimą: ${{ env.LABEL }}..."
+          echo "Laikas: ${{ env.TODAY }} ${{ env.NOW }}"
           response=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ env.TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -43,7 +46,5 @@ jobs:
                 \"source\": 1
               }
             }")
-          echo "Režimas: ${{ env.LABEL }}"
-          echo "Data:    ${{ env.TODAY }}"
-          echo "Laikas:  ${{ env.NOW }}"
-          echo "API atsakymas: $response"
+          echo "➡️ API atsakymas:"
+          echo "$response"
