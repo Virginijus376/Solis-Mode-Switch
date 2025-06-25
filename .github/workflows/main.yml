@@ -15,6 +15,9 @@ jobs:
       DEVICE_SN:  ${{ secrets.DEVICE_SN }}
 
     steps:
+      - name: Įdiegti jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Perjungti inverterio režimą
         run: |
           # 1) Parenkame režimą + date/time
