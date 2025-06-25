@@ -10,22 +10,43 @@ jobs:
   switch-mode:
     runs-on: ubuntu-latest
     steps:
-      - name: Pasirinkti režimą pagal laiką
+      - name: Nustatyti režimą ir datą
         run: |
           if [[ "${{ github.event.schedule }}" == "0 0 * * *" ]]; then
-            echo "MODE=2" >> $GITHUB_ENV  # Selling First
+            echo "MODE=2" >> $GITHUB_ENV
+            echo "MODE_LABEL=Selling First" >> $GITHUB_ENV
           else
-            echo "MODE=3" >> $GITHUB_ENV  # Self Use
+            echo "MODE=3" >> $GITHUB_ENV
+            echo "MODE_LABEL=Self-Use" >> $GITHUB_ENV
           fi
+          echo "TODAY=$(date +%F)" >> $GITHUB_ENV
+
       - name: Gauti prieigos raktą
         run: |
           token=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Content-Type: application/json" \
             -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" | jq -r .access_token)
           echo "TOKEN=$token" >> $GITHUB_ENV
-      - name: Pakeisti inverterio darbo režimą
+
+      - name: Išsiųsti darbo režimo pakeitimą su data
         run: |
-          curl -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+          curl -v -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ env.TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":\"${{ env.MODE }}\"}}"
+            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":\"${{ env.MODE }}\",\"date\":\"${{ env.TODAY }}\"}}"
+
+      - name: Siųsti el. laišką apie rezultatą
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "SolisCloud: Režimas ➜ ${{ env.MODE_LABEL }}"
+          to: ${{ secrets.EMAIL_TO }}
+          from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
+          body: |
+            ✅ Režimas perjungtas į: ${{ env.MODE_LABEL }}
+            📅 Data: ${{ env.TODAY }}
+            🟢 Užklausa su data išsiųsta per GitHub Actions.
