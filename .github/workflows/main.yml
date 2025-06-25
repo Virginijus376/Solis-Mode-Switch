@@ -17,29 +17,28 @@ jobs:
     steps:
       - name: Korektiškai perjungti režimą
         run: |
-          # 1) Režimas, data/laikas control API
+          # 1) Nustatome režimą pagal valandas
           hour=$(date +%H)
           if (( 10#$hour < 12 )); then
             MODE=2; LABEL="Selling First"
           else
             MODE=3; LABEL="Self-Use"
           fi
+          echo "🔄 Režimas: $LABEL ($MODE)"
+
+          # 2) Sukuriame date/time
           TODAY=$(date +%F)
           NOW=$(date +%T)
-          echo "🔄 Režimas:  $LABEL ($MODE)"
-          echo "📅 Data:     $TODAY"
-          echo "⏰ Laikas:   $NOW"
+          echo "📅 Data:   $TODAY"
+          echo "⏰ Laikas: $NOW"
 
-          # 2) Timestamp token login’ui (ms nuo epoch)
-          TS=$(date +%s%3N)
-          echo "⏱️  Timestamp: $TS"
-
-          # 3) Token payload su timestamp
+          # 3) Tokeno JSON SU date + time
           token_payload=$(jq -nc \
             --arg appId "$APP_ID" \
             --arg secret "$APP_SECRET" \
-            --argjson timestamp "$TS" \
-            '{appId:$appId, secret:$secret, timestamp:$timestamp}')
+            --arg date "$TODAY" \
+            --arg time "$NOW" \
+            '{appId:$appId, secret:$secret, date:$date, time:$time}')
           echo "🔐 Token payload: $token_payload"
 
           # 4) Gauname tokeną
@@ -49,12 +48,12 @@ jobs:
           echo "🔐 Token response: $token_resp"
           token=$(echo "$token_resp" | jq -r '.data.access_token // .access_token // empty')
           if [[ -z "$token" ]]; then
-            echo "❌ Nepavyko gauti tokeno – nutraukiu.";
+            echo "❌ Tokenas tuščias – stabdau job."
             exit 1
           fi
           echo "✅ Tokenas: $token"
 
-          # 5) Control payload su date+time
+          # 5) Control JSON su date + time (kaip anksčiau)
           control_payload=$(jq -nc \
             --arg dsn "$DEVICE_SN" \
             --argjson mode "$MODE" \
@@ -63,7 +62,7 @@ jobs:
             '{deviceSn:$dsn, param:{workMode:$mode, date:$date, time:$time, source:1}}')
           echo "📨 Control payload: $control_payload"
 
-          # 6) Siunčiame režimo pakeitimą
+          # 6) Siunčiame control užklausą
           control_resp=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer $token" \
             -H "Content-Type: application/json" \
