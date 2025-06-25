@@ -3,7 +3,7 @@ name: SolisCloud režimo keitimas
 on:
   schedule:
     - cron: '0 0 * * *'    # 03:00 LT – Selling First
-    - cron: '0 12 * * *'   # 15:00 LT – Self Use
+    - cron: '0 12 * * *'   # 15:00 LT – Self-Use
   workflow_dispatch:
 
 jobs:
@@ -29,28 +29,9 @@ jobs:
             -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" | jq -r .access_token)
           echo "TOKEN=$token" >> $GITHUB_ENV
 
-      - name: Išsiųsti darbo režimo pakeitimą su papildomais laukais
+      - name: Išsiųsti darbo režimo pakeitimą
         run: |
-          response=$(curl -s -w "%{http_code}" -o result.json -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+          curl -v -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ env.TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":\"${{ env.MODE }}\",\"date\":\"${{ env.TODAY }}\",\"time\":\"${{ env.NOW }}\",\"source\":1}}")
-          echo "HTTP_RESPONSE=$response" >> $GITHUB_ENV
-          cat result.json
-
-      - name: Siųsti el. laišką apie rezultatą
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          secure: true
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "SolisCloud: Režimas ➜ ${{ env.MODE_LABEL }}"
-          to: ${{ secrets.EMAIL_TO }}
-          from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
-          body: |
-            🟢 Bandymas pakeisti režimą į: ${{ env.MODE_LABEL }}
-            📅 Data: ${{ env.TODAY }}
-            ⏰ Laikas: ${{ env.NOW }}
-            📡 API atsakymas: ${{ env.HTTP_RESPONSE }}
+            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":\"${{ env.MODE }}\",\"date\":\"${{ env.TODAY }}\",\"time\":\"${{ env.NOW }}\",\"source\":1}}"
