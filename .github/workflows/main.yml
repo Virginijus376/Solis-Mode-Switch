@@ -11,41 +11,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Paruošti režimą ir timestamp’us
-        run: |
-          hour=$(date +%H)
-          if (( 10#$hour < 12 )); then
-            echo "MODE=2" >> $GITHUB_ENV
-            echo "LABEL=Selling First" >> $GITHUB_ENV
-          else
-            echo "MODE=3" >> $GITHUB_ENV
-            echo "LABEL=Self-Use" >> $GITHUB_ENV
-          fi
-          # Šitas blokas MĖTINAMAS VISADA:
-          echo "TODAY=$(date +%F)" >> $GITHUB_ENV
-          echo "NOW=$(date +%T)" >> $GITHUB_ENV
-
-      - name: Gauti prieigos tokeną
+      - name: Perjungti inverterio režimą
         env:
           APP_ID:     ${{ secrets.APP_ID }}
           APP_SECRET: ${{ secrets.APP_SECRET }}
+          DEVICE_SN:  ${{ secrets.DEVICE_SN }}
         run: |
+          # 1) Pasirenkame režimą
+          hour=$(date +%H)
+          if (( 10#$hour < 12 )); then
+            MODE=2; LABEL="Selling First"
+          else
+            MODE=3; LABEL="Self-Use"
+          fi
+
+          # 2) Generuojame date & time
+          TODAY=$(date +%F)
+          NOW=$(date +%T)
+          echo "▶ Mode: $LABEL ($MODE) | Date: $TODAY | Time: $NOW"
+
+          # 3) Gauname tokeną
           TOKEN=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Content-Type: application/json" \
             -d "{\"appId\":\"$APP_ID\",\"secret\":\"$APP_SECRET\"}" \
             | jq -r '.access_token // .data.access_token')
-          echo "TOKEN=$TOKEN" >> $GITHUB_ENV
+          echo "🔐 Token: $TOKEN"
 
-      - name: Pritaikyti inverterio režimą
-        env:
-          DEVICE_SN: ${{ secrets.DEVICE_SN }}
-        run: |
-          echo "▶️ Režimas:    $LABEL"
-          echo "📅 Data:      $TODAY"
-          echo "⏰ Laikas:    $NOW"
-
-          response=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+          # 4) Siunčiame control POST su JSON payload
+          RESPONSE=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"deviceSn\":\"$DEVICE_SN\",\"param\":{\"workMode\":$MODE,\"date\":\"$TODAY\",\"time\":\"$NOW\",\"source\":1}}")
-          echo "➡️ API atsakymas: $response"
+            -d '{"deviceSn":"'"$DEVICE_SN"'","param":{"workMode":'"$MODE"',"date":"'"$TODAY"'","time":"'"$NOW"'","source":1}}')
+          echo "📤 Response: $RESPONSE"
