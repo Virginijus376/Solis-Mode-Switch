@@ -2,42 +2,52 @@ name: SolisCloud režimo keitimas
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # 03:00 LT – Selling First
-    - cron: '0 12 * * *'  # 15:00 LT – Self-Use
+    - cron: '0 0 * * *'    # 03:00 LT – Selling First
+    - cron: '0 12 * * *'   # 15:00 LT – Self-Use
   workflow_dispatch:
 
 jobs:
   switch-mode:
     runs-on: ubuntu-latest
+    env:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
+      DEVICE_SN: ${{ secrets.DEVICE_SN }}
+
     steps:
-      - name: Nustatyti režimą
+      - name: Pakeisti inverterio režimą
         run: |
+          # 1) Nustatome ar šiandien "Selling First" (<12 val.) ar "Self-Use"
           hour=$(date +%H)
           if (( 10#$hour < 12 )); then
-            echo "MODE=2" >> $GITHUB_ENV
-            echo "LABEL=Selling First" >> $GITHUB_ENV
+            MODE=2
+            LABEL="Selling First"
           else
-            echo "MODE=3" >> $GITHUB_ENV
-            echo "LABEL=Self-Use" >> $GITHUB_ENV
+            MODE=3
+            LABEL="Self-Use"
           fi
+          echo "🔄 Režimas: $LABEL ($MODE)"
 
-      - name: Gauti SolisCloud tokeną
-        run: |
-          token=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
-            -H "Content-Type: application/json" \
-            -d "{\"appId\":\"${{ secrets.APP_ID }}\",\"secret\":\"${{ secrets.APP_SECRET }}\"}" \
-            | jq -r .access_token)
-          echo "TOKEN=$token" >> $GITHUB_ENV
-
-      - name: Išsiųsti darbo režimo pakeitimą
-        run: |
+          # 2) Tiesiogiai generuojame datą ir laiką
           TODAY=$(date +%F)
           NOW=$(date +%T)
-          echo "▶️ Režimas: ${{ env.LABEL }} | Data: $TODAY | Laikas: $NOW"
+          echo "📅 Data:  $TODAY"
+          echo "⏰ Laikas: $NOW"
 
-          RESPONSE=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
-            -H "Authorization: Bearer ${{ env.TOKEN }}" \
+          # 3) Gauname prieigos tokeną
+          token=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Content-Type: application/json" \
-            -d "{\"deviceSn\":\"${{ secrets.DEVICE_SN }}\",\"param\":{\"workMode\":${{ env.MODE }},\"date\":\"$TODAY\",\"time\":\"$NOW\",\"source\":1}}")
+            -d "{\"appId\":\"$APP_ID\",\"secret\":\"$APP_SECRET\"}" \
+            | jq -r .access_token)
+          echo "🔐 Token: $token"
 
-          echo "➡️ API atsakymas: $RESPONSE"
+          # 4) Sukuriame vienos eilutės payload su shell kintamaisiais
+          payload="{\"deviceSn\":\"$DEVICE_SN\",\"param\":{\"workMode\":$MODE,\"date\":\"$TODAY\",\"time\":\"$NOW\",\"source\":1}}"
+          echo "📨 Payload: $payload"
+
+          # 5) Siunčiame komandą ir parodome atsakymą
+          response=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+            -H "Authorization: Bearer $token" \
+            -H "Content-Type: application/json" \
+            -d "$payload")
+          echo "📤 Response: $response"
