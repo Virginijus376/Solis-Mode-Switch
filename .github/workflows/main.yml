@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Perjungti inverterio režimą
         run: |
-          # 1) Paruošiame MODE + control API date/time
+          # 1) MODE + control API date/time
           hour=$(date +%H)
           if ((10#$hour < 12)); then
             MODE=2; LABEL="Selling First"
@@ -29,28 +29,33 @@ jobs:
           TODAY=$(date +%F)
           NOW=$(date +%T)
 
-          # 2) Sukuriame privalomą HTTP Date header (RFC-1123)
+          # 2) RFC-1123 Date header tokenui
           HTTP_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S GMT")
 
-          echo "🔄 MODE: $LABEL ($MODE)"
-          echo "📅 DATE: $TODAY"
-          echo "⏰ TIME: $NOW"
+          echo "🔄 MODE:      $LABEL ($MODE)"
+          echo "📅 DATE:      $TODAY"
+          echo "⏰ TIME:      $NOW"
           echo "🗓 HTTP-Date: $HTTP_DATE"
 
-          # 3) GET token per query params + Date header
+          # 3) GET token su Basic auth + Date header
           TOKEN_URL="https://www.soliscloud.com:13333/oauth2/token?appId=$APP_ID&secret=$APP_SECRET&date=$TODAY&time=$NOW"
-          token_resp=$(curl -s -H "Date: $HTTP_DATE" "$TOKEN_URL")
+          echo "🔗 Token URL: $TOKEN_URL"
+          token_resp=$(curl -s \
+            -u "$APP_ID:$APP_SECRET" \
+            -H "Date: $HTTP_DATE" \
+            "$TOKEN_URL")
           echo "🔐 Token response: $token_resp"
 
+          # 4) Ištraukame tikrą token’ą
           TOKEN=$(echo "$token_resp" \
-            | jq -r '.data.access_token // .accessToken // .access_token // empty')
+            | jq -r '.data.access_token // .access_token // empty')
           if [[ -z "$TOKEN" ]]; then
-            echo "❌ Token gavimas nepavyko."
+            echo "❌ Token gavimas nepavyko – žiūrėkite aukščiau Token response."
             exit 1
           fi
           echo "✅ TOKEN: $TOKEN"
 
-          # 4) Siunčiame control POST su JSON payload’u
+          # 5) Siunčiame kontrolės komandą su JSON payload’u
           PAYLOAD='{"deviceSn":"'"$DEVICE_SN"'","param":{"workMode":'"$MODE"',"date":"'"$TODAY"'","time":"'"$NOW"'","source":1}}'
           echo "📨 Control payload: $PAYLOAD"
           control_resp=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
