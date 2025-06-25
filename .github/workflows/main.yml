@@ -35,9 +35,13 @@ jobs:
           HTTP_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S GMT")
           echo "🗓 Date header: $HTTP_DATE"
 
-          # 3) Gauname tokeną (Basic auth + Date header)
+          # 3) Paruošiam base64 tokeną teisingu formatu
+          AUTH=$(echo -n "$APP_ID:$APP_SECRET" | base64 -w 0)
+          echo "🔑 Base64 Authorization: $AUTH"
+
+          # 4) Gauname tokeną (Basic auth + Date header)
           token_resp=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
-            -H "Authorization: Basic $(echo -n "$APP_ID:$APP_SECRET" | base64)" \
+            -H "Authorization: Basic $AUTH" \
             -H "Date: $HTTP_DATE")
           echo "🔐 Token response: $token_resp"
 
@@ -48,7 +52,7 @@ jobs:
           fi
           echo "✅ Token: $token"
 
-          # 4) Siunčiame kontrolės komandą su JSON payload’u
+          # 5) Siunčiame kontrolės komandą su JSON payload’u
           payload='{"deviceSn":"'"$DEVICE_SN"'","param":{"workMode":'"$MODE"',"date":"'"$TODAY"'","time":"'"$NOW"'","source":1}}'
           echo "📨 Control payload: $payload"
           control_resp=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
