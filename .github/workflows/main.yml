@@ -2,15 +2,17 @@ name: SolisCloud režimo keitimas
 
 on:
   schedule:
-    - cron: '0 0 * * *'    # 03:00 Lietuvos laiku – Selling First
-    - cron: '0 12 * * *'   # 15:00 Lietuvos laiku – Self-Use
+    - cron: '0 0 * * *'    # 03:00 LT – Selling First
+    - cron: '0 12 * * *'   # 15:00 LT – Self-Use
   workflow_dispatch:
 
 jobs:
   switch-mode:
     runs-on: ubuntu-latest
+    env:
+      TODAY: ${{ github.run_started_at }}
     steps:
-      - name: Nustatyti režimą
+      - name: Nustatyti režimą ir laiką
         run: |
           hour=$(date +%H)
           if (( 10#$hour < 12 )); then
@@ -20,6 +22,8 @@ jobs:
             echo "MODE=3" >> $GITHUB_ENV
             echo "LABEL=Self-Use" >> $GITHUB_ENV
           fi
+          echo "TODAY=$(date +%F)" >> $GITHUB_ENV
+          echo "NOW=$(date +%T)" >> $GITHUB_ENV
 
       - name: Gauti SolisCloud prieigos raktą
         run: |
@@ -30,12 +34,9 @@ jobs:
 
       - name: Išsiųsti darbo režimo pakeitimą
         run: |
-          TODAY=$(date +%F)
-          NOW=$(date +%T)
           echo "📡 Režimas: ${{ env.LABEL }}"
-          echo "📅 Data:    $TODAY"
-          echo "⏰ Laikas:  $NOW"
-
+          echo "📅 Data:    ${{ env.TODAY }}"
+          echo "⏰ Laikas:  ${{ env.NOW }}"
           response=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ env.TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -43,11 +44,10 @@ jobs:
               \"deviceSn\": \"${{ secrets.DEVICE_SN }}\",
               \"param\": {
                 \"workMode\": \"${{ env.MODE }}\",
-                \"date\": \"$TODAY\",
-                \"time\": \"$NOW\",
+                \"date\": \"${{ env.TODAY }}\",
+                \"time\": \"${{ env.NOW }}\",
                 \"source\": 1
               }
             }")
-
           echo "➡️ API atsakymas:"
           echo "$response"
