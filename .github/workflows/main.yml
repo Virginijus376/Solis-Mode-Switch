@@ -19,12 +19,14 @@ jobs:
       - name: Gauti access_token iš SolisCloud
         id: token
         run: |
-          BASIC_AUTH=$(echo -n "${APP_ID}:${APP_SECRET}" | base64)
+          BASIC_AUTH=$(printf "%s:%s" "$APP_ID" "$APP_SECRET" | base64 -w 0)
           echo "📅 Date: ${{ steps.time.outputs.date }}"
           RESPONSE=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Authorization: Basic $BASIC_AUTH" \
             -H "Date: ${{ steps.time.outputs.date }}" \
-            -H "Content-Type: application/x-www-form-urlencoded")
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data "init=1")  # priverčia curl nusiųsti tuščią kūną
+
           echo "📥 Token Response: $RESPONSE"
           TOKEN=$(echo "$RESPONSE" | jq -r '.data.access_token')
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
