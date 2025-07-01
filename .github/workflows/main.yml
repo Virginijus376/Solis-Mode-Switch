@@ -12,26 +12,30 @@ jobs:
       DEVICE_SN: ${{ secrets.SOLIS_DEVICE_SN }}
 
     steps:
-      - name: Gauti UTC laiką RFC formatu
+      - name: Gauti UTC laiką RFC 1123 formatu
         id: time
         run: echo "date=$(date -u '+%a, %d %b %Y %H:%M:%S GMT')" >> $GITHUB_OUTPUT
 
-      - name: Gauti access_token
+      - name: Gauti access_token iš SolisCloud
         id: token
         run: |
           BASIC_AUTH=$(echo -n "${APP_ID}:${APP_SECRET}" | base64)
+          echo "📅 Date: ${{ steps.time.outputs.date }}"
           RESPONSE=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
             -H "Authorization: Basic $BASIC_AUTH" \
-            -H "Date: '${{ steps.time.outputs.date }}'" \
+            -H "Date: ${{ steps.time.outputs.date }}" \
             -H "Content-Type: application/x-www-form-urlencoded")
-          echo "📥 Response: $RESPONSE"
+          echo "📥 Token Response: $RESPONSE"
           TOKEN=$(echo "$RESPONSE" | jq -r '.data.access_token')
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
-      - name: Siųsti inverteriui darbo režimą
+      - name: Siųsti inverteriui darbo režimą (pvz. Selling First)
         run: |
           WORKMODE=2  # 1 = Self-Use, 2 = Selling First
+          echo "💡 Naudojame workMode: $WORKMODE"
+          echo "📦 Token: ${{ steps.token.outputs.token }}"
           curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
             -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
             -H "Content-Type: application/json" \
+            -H "Date: ${{ steps.time.outputs.date }}" \
             -d "{\"deviceSn\": \"${DEVICE_SN}\", \"workMode\": $WORKMODE, \"source\": 1}"
