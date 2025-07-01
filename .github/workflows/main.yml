@@ -1,51 +1,37 @@
-# .github/workflows/main.yml
-
-name: SolisCloud režimo keitimas
+name: Test SolisCloud Control
 
 on:
-  schedule:
-    - cron: '0 0 * * *'   # 03:00 LT – Selling First
-    - cron: '0 12 * * *'  # 15:00 LT – Self-Use
   workflow_dispatch:
 
 jobs:
-  switch-mode:
+  test-api:
     runs-on: ubuntu-latest
     env:
-      APP_ID:     ${{ secrets.APP_ID }}
-      APP_SECRET: ${{ secrets.APP_SECRET }}
-      DEVICE_SN:  ${{ secrets.DEVICE_SN }}
+      APP_ID: ${{ secrets.SOLIS_APP_ID }}
+      APP_SECRET: ${{ secrets.SOLIS_APP_SECRET }}
+      DEVICE_SN: ${{ secrets.SOLIS_DEVICE_SN }}
 
     steps:
-      - name: Perjungti inverterio režimą
+      - name: Gauti UTC laiką RFC formatu
+        id: time
+        run: echo "date=$(date -u '+%a, %d %b %Y %H:%M:%S GMT')" >> $GITHUB_OUTPUT
+
+      - name: Gauti access_token
+        id: token
         run: |
-          # 1) MODE + control API date/time
-          hour=$(date +%H)
-          if ((10#$hour < 12)); then
-            MODE=2; LABEL="Selling First"
-          else
-            MODE=3; LABEL="Self-Use"
-          fi
-          TODAY=$(date +%F)
-          NOW=$(date +%T)
-          echo "🔄 MODE:  $LABEL ($MODE)"
-          echo "📅 DATE:  $TODAY"
-          echo "⏰ TIME:  $NOW"
-          # 2) Gauname tokeną su Basic Auth
-          token_resp=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
-            -u "$APP_ID:$APP_SECRET")
-          echo "🔐 Token response: $token_resp"
-          TOKEN=$(echo "$token_resp" | jq -r '.data.access_token // .access_token')
-          if [[ -z "$TOKEN" ]]; then
-            echo "❌ Token gavimas nepavyko."
-            exit 1
-          fi
-          echo "✅ TOKEN: $TOKEN"
-          # 3) Kontrolės POST su JSON payload’u
-          PAYLOAD='{"deviceSn":"'"$DEVICE_SN"'","param":{"workMode":'"$MODE"',"date":"'"$TODAY"'","time":"'"$NOW"'","source":1}}'
-          echo "📨 Payload: $PAYLOAD"
-          control_resp=$(curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
-            -H "Authorization: Bearer $TOKEN" \
+          BASIC_AUTH=$(echo -n "${APP_ID}:${APP_SECRET}" | base64)
+          RESPONSE=$(curl -s -X POST https://www.soliscloud.com:13333/oauth2/token \
+            -H "Authorization: Basic $BASIC_AUTH" \
+            -H "Date: '${{ steps.time.outputs.date }}'" \
+            -H "Content-Type: application/x-www-form-urlencoded")
+          echo "📥 Response: $RESPONSE"
+          TOKEN=$(echo "$RESPONSE" | jq -r '.data.access_token')
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Siųsti inverteriui darbo režimą
+        run: |
+          WORKMODE=2  # 1 = Self-Use, 2 = Selling First
+          curl -s -X POST https://www.soliscloud.com:13333/api/v1/device/setting/control \
+            -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
-          echo "📤 Control response: $control_resp"
+            -d "{\"deviceSn\": \"${DEVICE_SN}\", \"workMode\": $WORKMODE, \"source\": 1}"
